@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NeuroNubo - Chatbot RAG</title>
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Marked.js CDN for Markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* Custom styles for a better look and feel */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        /* Custom scrollbar for a cleaner look */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b; /* slate-800 */
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569; /* slate-600 */
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b; /* slate-500 */
+        }
+
+        /* Styles for Markdown rendered content */
+        .markdown-content h1, .markdown-content h2, .markdown-content h3 {
+            font-weight: 600;
+            margin-top: 1rem;
+            margin-bottom: 0.5rem;
+        }
+        .markdown-content h1 { font-size: 1.5em; }
+        .markdown-content h2 { font-size: 1.25em; }
+        .markdown-content p { margin-bottom: 0.75rem; line-height: 1.6; }
+        .markdown-content ul, .markdown-content ol {
+            margin-left: 1.5rem;
+            margin-bottom: 1rem;
+        }
+        .markdown-content ul { list-style-type: disc; }
+        .markdown-content ol { list-style-type: decimal; }
+        .markdown-content li { margin-bottom: 0.25rem; }
+        .markdown-content code {
+            background-color: #1e293b; /* slate-800 */
+            color: #e2e8f0; /* slate-200 */
+            padding: 0.2rem 0.4rem;
+            border-radius: 0.25rem;
+            font-family: monospace;
+        }
+        .markdown-content pre {
+            background-color: #0f172a; /* slate-900 */
+            padding: 1rem;
+            border-radius: 0.5rem;
+            overflow-x: auto;
+            margin-bottom: 1rem;
+        }
+        .markdown-content pre code {
+             padding: 0;
+             background-color: transparent;
+        }
+        .markdown-content a {
+            color: #38bdf8; /* sky-400 */
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-300">
+
+    <div id="app" class="flex h-screen w-full">
+
+        <!-- Sidebar -->
+        <aside class="bg-slate-800/50 w-full md:w-80 flex-shrink-0 flex flex-col p-4 border-r border-slate-700">
+            <!-- Header -->
+            <div class="flex items-center space-x-3 mb-6">
+                <svg class="w-8 h-8 text-sky-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" />
+                </svg>
+                <h1 class="text-2xl font-bold text-slate-100">NeuroNubo</h1>
+            </div>
+
+            <!-- File Upload -->
+            <div class="mb-6">
+                <label for="file-upload" class="w-full cursor-pointer bg-sky-600 hover:bg-sky-700 text-white font-bold py-2 px-4 rounded-lg inline-flex items-center justify-center transition-colors duration-200">
+                    <svg class="w-5 h-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 16.5V9.75m0 0l-3.75 3.75M12 9.75l3.75 3.75M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z" />
+                    </svg>
+                    <span>Subir Documento</span>
+                </label>
+                <input id="file-upload" type="file" class="hidden">
+            </div>
+
+            <!-- Document List -->
+            <div class="flex-grow overflow-y-auto">
+                <h2 class="text-lg font-semibold text-slate-400 mb-3">Documentos Cargados</h2>
+                <ul id="document-list" class="space-y-2">
+                    <!-- Documents will be populated by JavaScript -->
+                    <li id="doc-list-placeholder" class="text-slate-500 italic">Cargando documentos...</li>
+                </ul>
+            </div>
+        </aside>
+
+        <!-- Main Chat Area -->
+        <main class="flex-1 flex flex-col bg-slate-900">
+            <!-- Chat History -->
+            <div id="chat-history" class="flex-1 p-6 overflow-y-auto">
+                <!-- Messages will be appended here -->
+                <div class="flex items-start gap-3">
+                    <div class="bg-slate-700 p-2 rounded-full">
+                        <svg class="w-6 h-6 text-sky-300" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                           <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 3v1.5M4.5 8.25H3m18 0h-1.5M4.5 12H3m18 0h-1.5m-15 3.75H3m18 0h-1.5M8.25 19.5V21M12 3v1.5m0 15V21m3.75-18v1.5m0 15V21m-9-1.5h10.5a2.25 2.25 0 0 0 2.25-2.25V6.75a2.25 2.25 0 0 0-2.25-2.25H6.75A2.25 2.25 0 0 0 4.5 6.75v10.5a2.25 2.25 0 0 0 2.25 2.25Z" />
+                        </svg>
+                    </div>
+                    <div class="bg-slate-800 rounded-lg p-4 max-w-2xl">
+                        <p>¡Hola! Soy NeuroNubo. Sube tus documentos y hazme una pregunta sobre ellos.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chat Input -->
+            <div class="p-6 border-t border-slate-700 bg-slate-900">
+                <form id="chat-form" class="relative">
+                    <input type="text" id="chat-input" placeholder="Escribe tu pregunta aquí..." autocomplete="off" class="w-full bg-slate-800 border border-slate-700 rounded-lg py-3 pl-4 pr-12 text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 transition-shadow">
+                    <button type="submit" class="absolute inset-y-0 right-0 flex items-center justify-center px-4 text-slate-400 hover:text-sky-400 transition-colors">
+                        <svg class="w-6 h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
+                        </svg>
+                    </button>
+                </form>
+            </div>
+        </main>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="notification-toast" class="fixed bottom-5 right-5 bg-green-500 text-white py-2 px-4 rounded-lg shadow-lg opacity-0 translate-y-10 transition-all duration-300">
+        <p id="notification-message"></p>
+    </div>
+
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- DOM Elements ---
+            const docList = document.getElementById('document-list');
+            const docListPlaceholder = document.getElementById('doc-list-placeholder');
+            const fileInput = document.getElementById('file-upload');
+            const chatForm = document.getElementById('chat-form');
+            const chatInput = document.getElementById('chat-input');
+            const chatHistory = document.getElementById('chat-history');
+            const notificationToast = document.getElementById('notification-toast');
+            const notificationMessage = document.getElementById('notification-message');
+
+            // --- API Endpoints ---
+            // Assuming the backend is running on the same host and port
+            const API_URLS = {
+                DOCUMENTS: 'http://localhost:8000/documents',
+                UPLOAD: 'http://localhost:8000/upload',
+                QUERY: 'http://localhost:8000/query'
+            };
+
+            // --- Functions ---
+
+            /**
+             * Shows a notification toast message.
+             * @param {string} message - The message to display.
+             * @param {boolean} isError - If true, shows an error-styled toast.
+             */
+            const showNotification = (message, isError = false) => {
+                notificationMessage.textContent = message;
+                notificationToast.classList.remove('bg-green-500', 'bg-red-500', 'opacity-0', 'translate-y-10');
+                notificationToast.classList.add(isError ? 'bg-red-500' : 'bg-green-500', 'opacity-100', 'translate-y-0');
+
+                setTimeout(() => {
+                    notificationToast.classList.remove('opacity-100', 'translate-y-0');
+                    notificationToast.classList.add('opacity-0', 'translate-y-10');
+                }, 3000);
+            };
+
+            /**
+             * Fetches the list of documents and updates the sidebar.
+             */
+            const fetchAndDisplayDocuments = async () => {
+                try {
+                    const response = await fetch(API_URLS.DOCUMENTS);
+                    if (!response.ok) {
+                        throw new Error(`Error del servidor: ${response.status}`);
+                    }
+                    const data = await response.json();
+
+                    docList.innerHTML = ''; // Clear current list
+
+                    if (data.uploaded_documents && data.uploaded_documents.length > 0) {
+                        data.uploaded_documents.forEach(docName => {
+                            const li = document.createElement('li');
+                            li.className = 'flex items-center space-x-2 text-slate-300 bg-slate-700/50 p-2 rounded-md';
+                            li.innerHTML = `
+                                <svg class="w-5 h-5 text-slate-400 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                                </svg>
+                                <span class="truncate" title="${docName}">${docName}</span>
+                            `;
+                            docList.appendChild(li);
+                        });
+                    } else {
+                         docList.innerHTML = '<li class="text-slate-500 italic">No hay documentos cargados.</li>';
+                    }
+                } catch (error) {
+                    console.error('Error al obtener documentos:', error);
+                    docList.innerHTML = '<li class="text-red-400 italic">No se pudieron cargar los documentos.</li>';
+                    if(docListPlaceholder) docListPlaceholder.remove();
+                }
+            };
+
+            /**
+             * Appends a message to the chat history.
+             * @param {string} content - The message content (HTML for bot, plain text for user).
+             * @param {'user' | 'bot'} sender - The sender of the message.
+             */
+            const addMessageToHistory = (content, sender) => {
+                const messageWrapper = document.createElement('div');
+
+                if (sender === 'user') {
+                    messageWrapper.className = 'flex items-start gap-3 justify-end';
+                    messageWrapper.innerHTML = `
+                        <div class="bg-sky-600 text-white rounded-lg p-4 max-w-2xl">
+                            <p>${content}</p>
+                        </div>
+                        <div class="bg-slate-700 p-2 rounded-full">
+                            <svg class="w-6 h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+                            </svg>
+                        </div>
+                    `;
+                } else { // Bot message
+                    messageWrapper.className = 'flex items-start gap-3 bot-message';
+                    messageWrapper.innerHTML = `
+                        <div class="bg-slate-700 p-2 rounded-full">
+                            <svg class="w-6 h-6 text-sky-300" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                               <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 3v1.5M4.5 8.25H3m18 0h-1.5M4.5 12H3m18 0h-1.5m-15 3.75H3m18 0h-1.5M8.25 19.5V21M12 3v1.5m0 15V21m3.75-18v1.5m0 15V21m-9-1.5h10.5a2.25 2.25 0 0 0 2.25-2.25V6.75a2.25 2.25 0 0 0-2.25-2.25H6.75A2.25 2.25 0 0 0 4.5 6.75v10.5a2.25 2.25 0 0 0 2.25 2.25Z" />
+                            </svg>
+                        </div>
+                        <div class="bg-slate-800 rounded-lg p-4 max-w-2xl markdown-content">
+                            ${content}
+                        </div>
+                    `;
+                }
+                chatHistory.appendChild(messageWrapper);
+                chatHistory.scrollTop = chatHistory.scrollHeight; // Auto-scroll to bottom
+            };
+
+            /**
+             * Shows a typing indicator for the bot.
+             */
+            const showBotTyping = () => {
+                const typingIndicator = `
+                    <div class="flex items-center space-x-1">
+                        <div class="w-2 h-2 bg-slate-400 rounded-full animate-pulse" style="animation-delay: 0s;"></div>
+                        <div class="w-2 h-2 bg-slate-400 rounded-full animate-pulse" style="animation-delay: 0.2s;"></div>
+                        <div class="w-2 h-2 bg-slate-400 rounded-full animate-pulse" style="animation-delay: 0.4s;"></div>
+                    </div>
+                `;
+                addMessageToHistory(typingIndicator, 'bot');
+            };
+
+            /**
+             * Removes the bot typing indicator.
+             */
+            const removeBotTyping = () => {
+                const typingMessage = chatHistory.querySelector('.bot-message:last-child');
+                if (typingMessage && typingMessage.querySelector('.animate-pulse')) {
+                    typingMessage.remove();
+                }
+            };
+
+
+            // --- Event Handlers ---
+
+            // Handle file upload
+            fileInput.addEventListener('change', async (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const formData = new FormData();
+                formData.append('file', file);
+
+                try {
+                    const response = await fetch(API_URLS.UPLOAD, {
+                        method: 'POST',
+                        body: formData,
+                    });
+                    const result = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(result.detail || 'Error al subir el archivo.');
+                    }
+
+                    showNotification(result.status || 'Archivo subido con éxito.');
+                    fetchAndDisplayDocuments(); // Refresh the list
+                } catch (error) {
+                    console.error('Error en la subida:', error);
+                    showNotification(error.message, true);
+                }
+
+                // Reset file input to allow uploading the same file again
+                event.target.value = '';
+            });
+
+            // Handle chat form submission
+            chatForm.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                const question = chatInput.value.trim();
+                if (!question) return;
+
+                addMessageToHistory(question, 'user');
+                chatInput.value = '';
+                showBotTyping();
+
+                try {
+                    const response = await fetch(API_URLS.QUERY, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ question: question }),
+                    });
+
+                    removeBotTyping();
+                    const result = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(result.detail || 'Error al obtener la respuesta.');
+                    }
+
+                    // Convert Markdown to HTML and display
+                    const botHtmlResponse = marked.parse(result.answer);
+                    addMessageToHistory(botHtmlResponse, 'bot');
+
+                } catch (error) {
+                    console.error('Error en la consulta:', error);
+                    removeBotTyping();
+                    const errorMessage = `<p class="text-red-400">Lo siento, ocurrió un error: ${error.message}</p>`;
+                    addMessageToHistory(errorMessage, 'bot');
+                }
+            });
+
+            // --- Initial Load ---
+            fetchAndDisplayDocuments();
+        });
+    </script>
+</body>
+</html>
