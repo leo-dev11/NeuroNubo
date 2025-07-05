@@ -31,6 +31,10 @@ app.add_middleware(
 )
 
 UPLOAD_DIR = "./documents"
+#Rutas del vectorstore
+INDEX_DIR = "faiss_index"
+FAISS_INDEX_FILE = os.path.join(INDEX_DIR, "index.faiss")
+
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 ALLOWED_EXTENSIONS = {".txt", ".pdf", ".docx"}
@@ -74,6 +78,15 @@ def load_documents_from_folder(folder_path="documents"):
                 print(f"Error leyendo {filename}: {e}")
     return docs
 
+def extract_text_from_file(filepath, ext):
+    if ext == ".pdf":
+        return read_pdf(filepath)
+    elif ext == ".docx":
+        return read_docx(filepath)
+    elif ext == ".txt":
+        return read_txt(filepath)
+    else:
+        raise ValueError("Extensión no soportada.")
 # ---- Crear documentos y embeddings ----
 user_docs = load_documents_from_folder("documents")
 
@@ -81,7 +94,18 @@ splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
 split_docs = splitter.split_documents(user_docs)
 
 embeddings = HuggingFaceEmbeddings(model_name="Qwen/Qwen3-Embedding-0.6B")
-vectorstore = FAISS.from_documents(split_docs, embeddings)
+
+if os.path.exists(FAISS_INDEX_FILE):
+    print("✅ Cargando vectorstore existente...")
+    vectorstore = FAISS.load_local(
+        INDEX_DIR,
+        embeddings,
+        allow_dangerous_deserialization=True
+    )
+else:
+    print("📦 No se encontró el índice, creando uno nuevo desde documentos...")
+    vectorstore = FAISS.from_documents(split_docs, embeddings)
+    vectorstore.save_local(INDEX_DIR)
 
 llm = ChatOpenAI(
     model="google/gemini-2.5-flash-lite-preview-06-17",
@@ -189,7 +213,25 @@ async def upload_file(file: UploadFile = File(...)):
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    return {"filename": file.filename, "status": "Documento cargado correctamente."}
+    try:
+        text = extract_text_from_file(file_path, file_ext)
+        if not text.strip():
+            raise ValueError("El archivo está vacío o no contiene texto útil.")
+
+        doc = Document(page_content=text, metadata={"source": file.filename})
+        new_chunks = splitter.split_documents([doc])
+
+        vectorstore.add_documents(new_chunks)
+
+        vectorstore.save_local("faiss_index")
+
+        return  {
+            "filename": file.filename,
+            "status": "Documento cargado e indexado correctamente.",
+            "chunks": len(new_chunks)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al procesar e indexar el documento: {e}")
 
 # GET para listar documentos cargados
 @app.get("/documents")
